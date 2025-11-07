@@ -1,0 +1,1165 @@
+--[[
+    Hirako Fishing Hub - WindUI Version
+]]
+
+local WindUI = loadstring(game:HttpGet("https://github.com/Footagesus/WindUI/releases/latest/download/main.lua"))()
+
+-- */ Import Fishing Script Variables and Functions /* --
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local Lighting = game:GetService("Lighting")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local GuiService = game:GetService("GuiService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+-- Waypoints Coordinates
+local islandCoords = {
+	["01"] = { name = "Weather Machine", position = Vector3.new(-1525, 2, 1915) },
+	["02"] = { name = "Esoteric Depths", position = Vector3.new(2961, -1303, 1521) },
+	["03"] = { name = "Tropical Grove", position = Vector3.new(-2019, 9, 3750) },
+	["04"] = { name = "Stingray Shores", position = Vector3.new(33, 3, 2764) },
+	["05"] = { name = "Kohana Volcano", position = Vector3.new(-562, 21, 156) },
+	["06"] = { name = "Coral Reefs", position = Vector3.new(-3031, 2, 2275) },
+	["07"] = { name = "Crater Island", position = Vector3.new(1084, 5, 5082) },
+	["08"] = { name = "Kohana", position = Vector3.new(-368, 6, 521) },
+	["09"] = { name = "Winter Fest", position = Vector3.new(1611, 4, 3280) },
+	["10"] = { name = "Isoteric Island", position = Vector3.new(2031, 27, 1380) },
+	["11"] = { name = "Treasure Hall", position = Vector3.new(-3603, -267, -1578) },
+	["12"] = { name = "Lost Shore", position = Vector3.new(-3738, 5, -855) },
+	["13"] = { name = "Sishypus Statue", position = Vector3.new(-3704, -136, -1018) },
+	["14"] = { name = "Secret Temple", position = Vector3.new(1475, -22, -632) },
+	["15"] = { name = "Kohana Spot 2", position = Vector3.new(-625, 19, 421) },
+	["16"] = { name = "Tropical Grove Cave 1", position = Vector3.new(-2151, 2, 3671) },
+	["17"] = { name = "Underground Cellar", position = Vector3.new(2136, -92, -699) },
+	["18"] = { name = "Ancient Jungle", position = Vector3.new(1274, 7, -184) },
+	["19"] = { name = "Ancient Jungle Outside", position = Vector3.new(1488, 7, -392) },
+	["20"] = { name = "Fisherman Island Underground", position = Vector3.new(-65, 3, 2849) },
+	["21"] = { name = "Admin Spot", position = Vector3.new(-1956, -441, 7389) },
+	["22"] = { name = "Crater Island Top", position = Vector3.new(1011, 22, 5076) },
+	["23"] = { name = "Coral Reefs Spot 3", position = Vector3.new(-3137, 2, 2126) },
+	["24"] = { name = "Tropical Grove Highground", position = Vector3.new(-2139, 53, 3624) },
+	["25"] = { name = "Tropical Grove Cave 2", position = Vector3.new(-2018, 4, 3756) },
+	["26"] = { name = "Coral Reefs Spot 1", position = Vector3.new(-3031, 2, 2275) }
+}
+
+-- Path dasar ke remote sleitnick_net
+local netPath = ReplicatedStorage:WaitForChild("Packages"):WaitForChild("_Index"):WaitForChild("sleitnick_net@0.2.0"):WaitForChild("net")
+
+-- ====== Remote Events & Functions ======
+local EquipToolRE = netPath:WaitForChild("RE/EquipToolFromHotbar")
+local ChargeRodRF = netPath:WaitForChild("RF/ChargeFishingRod")
+local RequestMinigameRF = netPath:WaitForChild("RF/RequestFishingMinigameStarted")
+local FishingCompletedRE = netPath:WaitForChild("RE/FishingCompleted")
+local SellAllItemsRF = netPath:FindFirstChild("RF/SellAllItems")
+local ActivateEnchantingAltarRE = netPath:WaitForChild("RE/ActivateEnchantingAltar")
+
+-- ====== Configuration Values & State ======
+local state = {
+    AutoFavourite = false,
+    AutoSell = false
+}
+
+local FishingState = {
+	autoFish = false,
+	perfectCast = true,
+	delayInitialized = false
+}
+
+local AntiAFKState = {
+	active = false
+}
+
+-- Auto Click Variables
+local AutoClickState = {
+    enabled = false,
+    clickDelay = 0.1,
+    lastValidDelay = 0.1,
+    MIN_DELAY = 0.0002,
+    SLOW_DOWN_DELAY = 5,
+    HOVER_DELAY = 4,
+    isHovering = false
+}
+
+-- Delay Bypass per pancing
+local RodDelays = {
+    ["Ares Rod"] = {bypass = 1.45},
+    ["Angler Rod"] = {bypass = 1.45},
+    ["Ghostfinn Rod"] = {bypass = 1.4},
+    ["Astral Rod"] = {bypass = 1.45},
+    ["Chrome Rod"] = {bypass = 2},
+    ["Steampunk Rod"] = {bypass = 2.3},
+    ["Lucky Rod"] = {bypass = 3.6},
+    ["Midnight Rod"] = {bypass = 3.4},
+    ["Demascus Rod"] = {bypass = 3.8},
+    ["Grass Rod"] = {bypass = 3.9},
+    ["Luck Rod"] = {bypass = 4.1},
+    ["Carbon Rod"] = {bypass = 3.8},
+    ["Lava Rod"] = {bypass = 4.1},
+    ["Starter Rod"] = {bypass = 4.2},
+}
+
+-- Nilai Delay yang Digunakan
+local BypassDelay = 4.2 -- Default delay starter rod bypass
+local additionalWait = 0 -- No additional wait for maximum speed
+local speedFactor = 1 -- Kecepatan normal
+
+local lastSellTime = 0
+local AUTO_SELL_THRESHOLD = 10
+local AUTO_SELL_DELAY = 30
+
+local allowedTiers = {
+    ["Secret"] = true,
+    ["Mythic"] = true,
+    ["Legendary"] = true
+}
+
+-- */ Fishing Functions /* --
+local function simulateClick()
+    local viewportSize = workspace.CurrentCamera.ViewportSize
+    local center = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
+
+    VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 0)
+    wait(0.00001)
+    VirtualInputManager:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 0)
+end
+
+local function startAutoClick()
+    task.spawn(function()
+        while AutoClickState.enabled do
+            local currentDelay = AutoClickState.isHovering and AutoClickState.HOVER_DELAY or AutoClickState.clickDelay
+            simulateClick()
+            wait(currentDelay)
+        end
+    end)
+end
+
+local function stopAutoClick()
+    AutoClickState.enabled = false
+end
+
+local function getValidRodName()
+    local player = Players.LocalPlayer
+    local backpackDisplay = player.PlayerGui:FindFirstChild("Backpack", true) and player.PlayerGui.Backpack:FindFirstChild("Display", true)
+    if not backpackDisplay then return nil end
+
+    for _, tile in ipairs(backpackDisplay:GetChildren()) do
+        local success, itemNamePath = pcall(function()
+            return tile.Inner.Tags.ItemName
+        end)
+        if success and itemNamePath and itemNamePath:IsA("TextLabel") then
+            local name = itemNamePath.Text
+            if RodDelays[name] then
+                return name
+            end
+        end
+    end
+    return nil
+end
+
+local function updateDelayBasedOnRod(showNotify)
+    if FishingState.delayInitialized then 
+        local currentRod = getValidRodName()
+        if currentRod and RodDelays[currentRod] and RodDelays[currentRod].bypass == BypassDelay then
+            return
+        end
+    end
+    
+    local rodName = getValidRodName()
+    local newBypass = 4.2 -- Default
+    
+    if rodName and RodDelays[rodName] then
+        newBypass = RodDelays[rodName].bypass
+        print(string.format("Rod Detected: %s | Bypass Delay: %.2fs", rodName, newBypass))
+    else
+        print("Warning: Rod Detection Failed. Using Default Starter Rod bypass delay.")
+    end
+    
+    if newBypass ~= BypassDelay then
+        BypassDelay = newBypass
+        if showNotify then
+            WindUI:Notify({
+                Title = "Rod Detection",
+                Content = string.format("Rod: %s | Delay: %.2fs", rodName or "Unknown", BypassDelay),
+                Icon = "fishing-rod"
+            })
+        end
+    end
+    
+    FishingState.delayInitialized = true
+end
+
+local function AdjustBypassDelay(delta)
+    BypassDelay = math.max(0, BypassDelay + delta)
+    print("Bypass Delay manually set to: " .. BypassDelay)
+end
+
+local function setupRodWatcher()
+    local player = Players.LocalPlayer
+    local backpackDisplay = player.PlayerGui:FindFirstChild("Backpack", true) and player.PlayerGui.Backpack:FindFirstChild("Display", true)
+    if backpackDisplay then
+        local function checkRodChange()
+            task.wait(0.5)
+            if not FishingState.delayInitialized then
+                updateDelayBasedOnRod(true)
+            end
+        end
+        backpackDisplay.ChildAdded:Connect(checkRodChange)
+        backpackDisplay.ChildRemoved:Connect(checkRodChange)
+    else
+        warn("Backpack Display not found, rod watcher disabled.")
+    end
+end
+
+local function startAutoSell()
+    task.spawn(function()
+        while state.AutoSell do
+            pcall(function()
+                if not game:GetService("CoreGui"):FindFirstChild("Replion") then task.wait(5); return end
+                local Replion = require(game:GetService("CoreGui").Replion)
+                if not Replion then return end
+
+                local DataReplion = Replion.Client:WaitReplion("Data", 10)
+                local items = DataReplion and DataReplion:Get({"Inventory","Items"})
+                if type(items) ~= "table" then return end
+
+                local unfavoritedCount = 0
+                for _, item in ipairs(items) do
+                    if not item.Favorited then
+                        unfavoritedCount = unfavoritedCount + (item.Count or 1)
+                    end
+                end
+
+                print("Auto Sell Debug: Unfavorited items count: " .. unfavoritedCount .. " | Threshold: " .. AUTO_SELL_THRESHOLD .. " | Time since last sell: " .. (os.time() - lastSellTime) .. " | Delay: " .. AUTO_SELL_DELAY)
+
+                if unfavoritedCount >= AUTO_SELL_THRESHOLD and os.time() - lastSellTime >= AUTO_SELL_DELAY then
+                    print("Auto Sell: Triggering sell...")
+                    sellAllFishes()
+                    lastSellTime = os.time()
+                end
+            end)
+            task.wait(10)
+        end
+    end)
+end
+
+local function startAutoFavourite()
+    task.spawn(function()
+        while state.AutoFavourite do
+            pcall(function()
+                 if not game:GetService("CoreGui"):FindFirstChild("Replion") then task.wait(5); return end
+                 if not game:GetService("ReplicatedStorage"):FindFirstChild("ItemUtility") then task.wait(5); return end
+
+                 local Replion = require(game:GetService("CoreGui").Replion)
+                 local ItemUtility = require(game:GetService("ReplicatedStorage").ItemUtility)
+                 if not Replion or not ItemUtility then return end
+
+                 local DataReplion = Replion.Client:WaitReplion("Data", 10)
+                 local items = DataReplion and DataReplion:Get({"Inventory","Items"})
+                 if type(items) ~= "table" then return end
+
+                 for _, item in ipairs(items) do
+                     local base = ItemUtility:GetItemData(item.Id)
+                     if base and base.Data and allowedTiers[base.Data.Tier] and not item.Favorited then
+                         item.Favorited = true
+                         print("Auto Favorited: " .. (base.Name or item.Id))
+                     end
+                 end
+            end)
+            task.wait(5)
+        end
+    end)
+end
+
+function StartAutoFish()
+    if FishingState.autoFish then return end
+
+    FishingState.autoFish = true
+    FishingState.delayInitialized = false
+    updateDelayBasedOnRod(true)
+    task.spawn(function()
+        while FishingState.autoFish do
+            pcall(function()
+                print("🎣 Starting new fishing cycle...")
+
+                -- 1. Equip (skip if already holding tool)
+                if not LocalPlayer.Character:FindFirstChildOfClass("Tool") then
+                    EquipToolRE:FireServer(1)
+                    task.wait(0.2)
+                end
+
+                -- 2. Charge
+                ChargeRodRF:InvokeServer(workspace:GetServerTimeNow())
+                task.wait(0.5)
+
+                -- 3. Cast
+                local timestamp = workspace:GetServerTimeNow()
+                ChargeRodRF:InvokeServer(timestamp)
+                print("  -> Casting rod...")
+
+                -- 4. Send Minigame Result
+                local x, y
+                local baseX, baseY = 0.0, 1.0
+                if FishingState.perfectCast then
+                    x = baseX + (math.random(-500, 500) / 10000000)
+                    y = baseY + (math.random(-500, 500) / 10000000)
+                else
+                    x = math.random(-1000, 1000) / 1000
+                    y = math.random(0, 1000) / 1000
+                end
+                RequestMinigameRF:InvokeServer(x, y)
+                print("  -> Minigame result sent.")
+
+                -- 5. Wait for Catch Time
+                local effectiveBypass = BypassDelay / speedFactor + (math.random(-50, 50)/1000)
+                print(string.format("  -> Waiting %.2fs for bite (based on Bypass: %.2fs)...", effectiveBypass, BypassDelay))
+                task.wait(effectiveBypass)
+
+                -- 6. Tunggu Jeda Tambahan Singkat
+                task.wait(additionalWait)
+
+                -- 7. Send Catch Confirmation and Immediate Recast berbarengan
+                FishingCompletedRE:FireServer()
+                print("✅ Fish Caught!")
+
+                -- Immediate recast berbarengan tanpa delay
+                task.spawn(function()
+                    if not LocalPlayer.Character:FindFirstChildOfClass("Tool") then
+                        EquipToolRE:FireServer(1)
+                        task.wait(0.1)
+                    end
+                    ChargeRodRF:InvokeServer(workspace:GetServerTimeNow())
+                    task.wait(0.3)
+                    local timestamp = workspace:GetServerTimeNow()
+                    ChargeRodRF:InvokeServer(timestamp)
+                    print("  -> Immediate Casting rod...")
+                    local x, y
+                    local baseX, baseY = 0.0, 1.0
+                    if FishingState.perfectCast then
+                        x = baseX + (math.random(-500, 500) / 10000000)
+                        y = baseY + (math.random(-500, 500) / 10000000)
+                    else
+                        x = math.random(-1000, 1000) / 1000
+                        y = math.random(0, 1000) / 1000
+                    end
+                    RequestMinigameRF:InvokeServer(x, y)
+                    print("  -> Minigame result sent.")
+                    local effectiveBypass = BypassDelay / speedFactor + (math.random(-50, 50)/1000)
+                    print(string.format("  -> Waiting %.2fs for bite (based on Bypass: %.2fs)...", effectiveBypass, BypassDelay))
+                    task.wait(effectiveBypass)
+                    FishingCompletedRE:FireServer()
+                    print("✅ Immediate Fish Caught!")
+                end)
+
+            end)
+            task.wait(0.1)
+        end
+        print("🛑 Auto Fish Stopped.")
+        StopAutoFish()
+    end)
+end
+
+function StopAutoFish()
+    FishingState.autoFish = false
+    FishingState.delayInitialized = false
+end
+
+function sellAllFishes()
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		print("Error: Character HRP not found for selling.")
+		return
+	end
+
+	task.spawn(function()
+		print("💸 Selling all fish...")
+		task.wait(1)
+		local success, result = pcall(function()
+			return SellAllItemsRF:InvokeServer()
+		end)
+
+		if success then
+			print("✅ All non-favorited fish sold successfully!")
+		else
+			print("❌ Sell Failed: " .. tostring(result))
+		end
+	end)
+end
+
+function autoEnchantRod()
+    local ENCHANT_POSITION = Vector3.new(3231, -1303, 1402)
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+
+    if not hrp then
+        print("Error: Failed to get character HRP for enchanting.")
+        return
+    end
+
+    print("Info: Please manually place Enchant Stone into slot 5 before we begin...")
+    task.wait(3)
+
+    local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+    local backpackDisplay = PlayerGui:WaitForChild("Backpack"):WaitForChild("Display")
+    local children = backpackDisplay:GetChildren()
+    local slot5 = nil
+    for _, child in ipairs(children) do
+        if child:FindFirstChild("Order") and child.Order.Value == 5 then
+            slot5 = child
+            break
+        end
+    end
+    if not slot5 and #children >= 5 then slot5 = children[5] end
+
+    local itemName = slot5 and slot5:FindFirstChild("Inner") and slot5.Inner:FindFirstChild("Tags") and slot5.Inner.Tags:FindFirstChild("ItemName")
+
+    if not itemName or not itemName.Text or not string.lower(itemName.Text):find("enchant") then
+        print("Error: Slot 5 does not contain an Enchant Stone.")
+        return
+    end
+
+    print("Info: Enchanting in progress, please wait...")
+
+    local originalPosition = hrp.CFrame
+    task.wait(1)
+    hrp.CFrame = CFrame.new(ENCHANT_POSITION + Vector3.new(0, 5, 0))
+    task.wait(1.2)
+
+    pcall(function()
+        EquipToolRE:FireServer(5)
+        task.wait(0.5)
+        ActivateEnchantingAltarRE:FireServer()
+        task.wait(7)
+        print("Success: Successfully Enchanted!")
+    end)
+
+    task.wait(0.9)
+    hrp.CFrame = originalPosition * CFrame.new(0, 3, 0)
+end
+
+local function AutoReconnect()
+    while task.wait(5) do
+        if not Players.LocalPlayer or not Players.LocalPlayer:IsDescendantOf(game) then
+            print("Detected disconnect, attempting to reconnect...")
+            TeleportService:Teleport(game.PlaceId)
+        end
+    end
+end
+
+local function BoostFPS()
+    for _, v in pairs(game:GetDescendants()) do
+        if v:IsA("BasePart") then
+            v.Material = Enum.Material.SmoothPlastic
+            v.Reflectance = 0
+        elseif v:IsA("Decal") or v:IsA("Texture") then
+            v.Transparency = 1
+        end
+    end
+
+    for _, effect in pairs(Lighting:GetChildren()) do
+        if effect:IsA("PostEffect") then
+            effect.Enabled = false
+        end
+    end
+
+    Lighting.GlobalShadows = false
+    Lighting.FogEnd = 1e10
+
+    settings().Rendering.QualityLevel = "Level01"
+    print("FPS Boost applied.")
+end
+
+-- */ Teleport Functions /* --
+local function GetPlayerList()
+    local playerList = {}
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            table.insert(playerList, player.Name)
+        end
+    end
+    return playerList
+end
+
+local function TeleportToPlayer(playerName)
+    if not playerName or playerName == "" or playerName == "Select Player" then
+        print("❌ Invalid player name")
+        return
+    end
+    
+    local targetPlayer = Players:FindFirstChild(playerName)
+    if not targetPlayer then
+        print("❌ Player not found: " .. playerName)
+        return
+    end
+    
+    local targetChar = targetPlayer.Character
+    local targetHRP = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+    if not targetHRP then
+        print("❌ Target player HRP not found.")
+        return
+    end
+    
+    local localChar = LocalPlayer.Character
+    local localHRP = localChar and localChar:FindFirstChild("HumanoidRootPart")
+    if not localHRP then
+        print("❌ Local player HRP not found.")
+        return
+    end
+    
+    localHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 0, 3)
+    print("🚀 Teleported to: " .. playerName)
+end
+
+local function TeleportToWaypoint(waypointKey)
+    local waypoint = islandCoords[waypointKey]
+    if not waypoint then
+        print("❌ Waypoint not found: " .. waypointKey)
+        return
+    end
+    local char = LocalPlayer.Character
+    local hrp = char and char:FindFirstChild("HumanoidRootPart")
+    if not hrp then
+        print("❌ HumanoidRootPart not found.")
+        return
+    end
+    hrp.CFrame = CFrame.new(waypoint.position + Vector3.new(0, 5, 0))
+    print("🚀 Teleported to: " .. waypoint.name)
+end
+
+-- */ Anti-AFK Functions /* --
+local function StartAntiAFK()
+    if AntiAFKState.active then return end
+    AntiAFKState.active = true
+    task.spawn(function()
+        while AntiAFKState.active do
+            pcall(function()
+                local char = LocalPlayer.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local humanoid = char and char:FindFirstChild("Humanoid")
+                if hrp and humanoid then
+                    local originalPos = hrp.Position
+                    local originalCFrame = hrp.CFrame
+
+                    local moveDirection = Vector3.new(math.random(-1, 1), 0, math.random(-1, 1)).Unit * 0.5
+                    hrp.CFrame = hrp.CFrame * CFrame.new(moveDirection)
+                    task.wait(0.2)
+
+                    if math.random(1, 5) == 1 then
+                        humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                        task.wait(0.5)
+                    end
+
+                    hrp.CFrame = CFrame.new(originalPos) * (originalCFrame - originalCFrame.Position)
+                    task.wait(0.2)
+                end
+            end)
+            task.wait(math.random(45, 75))
+        end
+    end)
+    print("🛡️ Advanced Anti-AFK activated.")
+end
+
+local function StopAntiAFK()
+    AntiAFKState.active = false
+    print("🛡️ Anti-AFK deactivated.")
+end
+
+-- ============================================================
+-- UI: WindUI - NEW DESIGN
+-- ============================================================
+local Window = WindUI:CreateWindow({
+    Title = "HIRAKO | FISHING HUB",
+    Icon = "lucide:fish", 
+    Author = "Hirako",
+    Folder = "Hirako",
+    Size = UDim2.fromOffset(580, 460),
+    Theme = "Midnight",
+    Resizable = true,
+    SideBarWidth = 200,
+    Watermark = "Hirako Fishing",
+    User = {
+        Enabled = true,
+        Anonymous = false,
+        Callback = function()
+            WindUI:Notify({
+                Title = "User Profile",
+                Content = "Hirako Fishing Hub User!",
+                Duration = 3
+            })
+        end
+    }
+})
+
+-- Tabs
+local MainTab = Window:Tab({
+    Title = "Auto Fishing",
+    Icon = "lucide:fish",
+    Default = true
+})
+
+local TeleportTab = Window:Tab({
+    Title = "Teleport", 
+    Icon = "lucide:map-pin",
+})
+
+local AutoFeaturesTab = Window:Tab({
+    Title = "Auto Features",
+    Icon = "lucide:zap",
+})
+
+local UtilitiesTab = Window:Tab({
+    Title = "Utilities",
+    Icon = "lucide:settings",
+})
+
+local AboutTab = Window:Tab({
+    Title = "About",
+    Icon = "lucide:info",
+})
+
+-- ============================================================
+-- Main Tab (Auto Fishing)
+-- ============================================================
+MainTab:Section({
+    Title = "Auto Fishing Settings",
+    TextSize = 16,
+})
+
+-- Speed Dropdown
+local speeds = {}
+for v = 0.25, 3, 0.25 do
+    table.insert(speeds, string.format("%.2fx", v))
+end
+
+MainTab:Dropdown({
+    Title = "Fishing Speed",
+    Icon = "lucide:zap",
+    Values = speeds,
+    Value = "1.00x",
+    Callback = function(option)
+        local num = tonumber(option:match("([%d%.]+)"))
+        if num then
+            speedFactor = num
+            WindUI:Notify({
+                Title = "Fishing Speed",
+                Content = string.format("Speed set to: %.2fx", speedFactor),
+                Duration = 3
+            })
+        end
+    end
+})
+
+MainTab:Toggle({
+    Title = "Perfect Cast", 
+    Icon = "lucide:target",
+    Desc = "Aktifkan cast sempurna untuk hasil maksimal",
+    Value = FishingState.perfectCast,
+    Callback = function(state)
+        FishingState.perfectCast = state
+        WindUI:Notify({
+            Title = "Perfect Cast",
+            Content = state and "✅ Aktif" or "❌ Nonaktif",
+            Duration = 2
+        })
+    end
+})
+
+-- Bypass Delay Controls
+MainTab:Section({
+    Title = "Bypass Delay Settings",
+    TextSize = 14,
+})
+
+MainTab:Section({
+    Title = string.format("Current Delay: %.2fs", BypassDelay),
+    TextSize = 12,
+    TextTransparency = 0.5,
+})
+
+MainTab:Button({
+    Title = "- 0.1s Delay",
+    Icon = "lucide:minus",
+    Desc = "Kurangi bypass delay",
+    Callback = function()
+        AdjustBypassDelay(-0.1)
+        WindUI:Notify({
+            Title = "Bypass Delay",
+            Content = string.format("Delay: %.2fs", BypassDelay),
+            Duration = 2
+        })
+    end
+})
+
+MainTab:Button({
+    Title = "+ 0.1s Delay",
+    Icon = "lucide:plus",
+    Desc = "Tambah bypass delay",
+    Callback = function()
+        AdjustBypassDelay(0.1)
+        WindUI:Notify({
+            Title = "Bypass Delay",
+            Content = string.format("Delay: %.2fs", BypassDelay),
+            Duration = 2
+        })
+    end
+})
+
+-- Additional Wait Input
+MainTab:Input({
+    Title = "Additional Wait",
+    Icon = "lucide:clock",
+    Desc = "Waktu tambahan setelah bite (detik)",
+    Value = tostring(additionalWait),
+    Callback = function(value)
+        local number = tonumber(value)
+        if number and number >= 0 then
+            additionalWait = number
+            WindUI:Notify({
+                Title = "Additional Wait",
+                Content = string.format("Set to: %.2fs", additionalWait),
+                Duration = 2
+            })
+        else
+            WindUI:Notify({
+                Title = "Error",
+                Content = "Invalid input!",
+                Duration = 2
+            })
+        end
+    end
+})
+
+-- Main Fishing Buttons
+MainTab:Button({
+    Title = "START AUTO FISH",
+    Icon = "lucide:play", 
+    Desc = "Mulai auto fishing",
+    Callback = function()
+        if FishingState.autoFish then
+            StopAutoFish()
+            WindUI:Notify({
+                Title = "Auto Fishing",
+                Content = "Dihentikan!",
+                Duration = 2
+            })
+        else
+            StartAutoFish()
+            WindUI:Notify({
+                Title = "Auto Fishing",
+                Content = "Dimulai!",
+                Duration = 2
+            })
+        end
+    end
+})
+
+MainTab:Button({
+    Title = "STOP AUTO FISH",
+    Icon = "lucide:stop-circle",
+    Desc = "Hentikan auto fishing", 
+    Callback = function()
+        StopAutoFish()
+        WindUI:Notify({
+            Title = "Auto Fishing",
+            Content = "Dihentikan!",
+            Duration = 2
+        })
+    end
+})
+
+-- ============================================================
+-- Teleport Tab
+-- ============================================================
+TeleportTab:Section({
+    Title = "Island Waypoints",
+    TextSize = 16,
+})
+
+-- Waypoints Grid
+local waypointKeys = {}
+for key in pairs(islandCoords) do
+    table.insert(waypointKeys, key)
+end
+table.sort(waypointKeys)
+
+for _, key in ipairs(waypointKeys) do
+    local waypoint = islandCoords[key]
+    TeleportTab:Button({
+        Title = key .. ": " .. waypoint.name,
+        Icon = "lucide:map-pin",
+        Desc = "Teleport ke " .. waypoint.name,
+        Callback = function()
+            TeleportToWaypoint(key)
+            WindUI:Notify({
+                Title = "Teleport",
+                Content = "Ke: " .. waypoint.name,
+                Duration = 3
+            })
+        end
+    })
+end
+
+TeleportTab:Space({ Columns = 2 })
+
+TeleportTab:Section({
+    Title = "Player Teleport",
+    TextSize = 16,
+})
+
+-- Player Teleport Dropdown
+local playerList = GetPlayerList()
+local playerDropdownValues = {}
+
+for _, playerName in ipairs(playerList) do
+    table.insert(playerDropdownValues, {
+        Title = playerName,
+        Icon = "user"
+    })
+end
+
+if #playerDropdownValues > 0 then
+    TeleportTab:Dropdown({
+        Title = "Select Player",
+        Icon = "lucide:users",
+        Desc = "Pilih player untuk teleport",
+        Values = playerDropdownValues,
+        Value = {Title = "Select Player", Icon = "user"},
+        Callback = function(option)
+            if option.Title ~= "Select Player" and option.Title ~= "No players found" and option.Title ~= "" then
+                TeleportToPlayer(option.Title)
+                WindUI:Notify({
+                    Title = "Teleport",
+                    Content = "Ke: " .. option.Title,
+                    Duration = 3
+                })
+            end
+        end
+    })
+else
+    TeleportTab:Dropdown({
+        Title = "Select Player", 
+        Icon = "lucide:users",
+        Desc = "Pilih player untuk teleport",
+        Values = {{Title = "No players found", Icon = "user"}},
+        Value = {Title = "No players found", Icon = "user"},
+        Callback = function() end
+    })
+end
+
+TeleportTab:Button({
+    Title = "Refresh Player List",
+    Icon = "lucide:refresh-cw",
+    Desc = "Refresh daftar player yang online",
+    Callback = function()
+        local newPlayerList = GetPlayerList()
+        WindUI:Notify({
+            Title = "Player List", 
+            Content = #newPlayerList > 0 and ("Found " .. #newPlayerList .. " players") or "No other players found",
+            Duration = 3
+        })
+    end
+})
+
+-- ============================================================
+-- Auto Features Tab
+-- ============================================================
+AutoFeaturesTab:Section({
+    Title = "Auto Features Settings",
+    TextSize = 16,
+})
+
+AutoFeaturesTab:Toggle({
+    Title = "Auto Sell",
+    Icon = "lucide:shopping-cart",
+    Desc = "Otomatis jual ikan non-favorit",
+    Value = state.AutoSell,
+    Callback = function(value)
+        state.AutoSell = value
+        if value then
+            startAutoSell()
+            WindUI:Notify({
+                Title = "Auto Sell",
+                Content = "✅ Aktif!",
+                Duration = 2
+            })
+        else
+            WindUI:Notify({
+                Title = "Auto Sell",
+                Content = "❌ Nonaktif!",
+                Duration = 2
+            })
+        end
+    end
+})
+
+AutoFeaturesTab:Toggle({
+    Title = "Auto Favourite", 
+    Icon = "lucide:star",
+    Desc = "Otomatis favoritkan item tier tinggi",
+    Value = state.AutoFavourite,
+    Callback = function(value)
+        state.AutoFavourite = value
+        if value then
+            startAutoFavourite()
+            WindUI:Notify({
+                Title = "Auto Favourite",
+                Content = "✅ Aktif!",
+                Duration = 2
+            })
+        else
+            WindUI:Notify({
+                Title = "Auto Favourite",
+                Content = "❌ Nonaktif!",
+                Duration = 2
+            })
+        end
+    end
+})
+
+AutoFeaturesTab:Button({
+    Title = "Sell All Fish",
+    Icon = "lucide:dollar-sign",
+    Desc = "Jual semua ikan non-favorit",
+    Callback = function()
+        sellAllFishes()
+        WindUI:Notify({
+            Title = "Sell All",
+            Content = "Menjual semua ikan...",
+            Duration = 3
+        })
+    end
+})
+
+AutoFeaturesTab:Button({
+    Title = "Auto Enchant Rod",
+    Icon = "lucide:wand",
+    Desc = "Otomatis enchant fishing rod",
+    Callback = function()
+        autoEnchantRod()
+        WindUI:Notify({
+            Title = "Auto Enchant",
+            Content = "Memulai proses enchant...",
+            Duration = 3
+        })
+    end
+})
+
+-- ============================================================
+-- Utilities Tab
+-- ============================================================
+UtilitiesTab:Section({
+    Title = "Utility Settings",
+    TextSize = 16,
+})
+
+UtilitiesTab:Toggle({
+    Title = "Anti-AFK",
+    Icon = "lucide:shield",
+    Desc = "Mencegah AFK detection",
+    Value = AntiAFKState.active,
+    Callback = function(value)
+        if value then
+            StartAntiAFK()
+        else
+            StopAntiAFK()
+        end
+    end
+})
+
+UtilitiesTab:Toggle({
+    Title = "Auto Click",
+    Icon = "lucide:mouse-pointer",
+    Desc = "Otomatis klik mouse",
+    Value = AutoClickState.enabled,
+    Callback = function(value)
+        AutoClickState.enabled = value
+        if value then
+            startAutoClick()
+            WindUI:Notify({
+                Title = "Auto Click",
+                Content = "✅ Aktif!",
+                Duration = 2
+            })
+        else
+            stopAutoClick()
+            WindUI:Notify({
+                Title = "Auto Click",
+                Content = "❌ Nonaktif!",
+                Duration = 2
+            })
+        end
+    end
+})
+
+UtilitiesTab:Slider({
+    Title = "Click Delay",
+    Icon = "lucide:clock",
+    Desc = "Atur delay auto click (detik)",
+    Value = { Min = 0.01, Max = 2, Default = 0.1 },
+    Step = 0.01,
+    Suffix = "s",
+    Callback = function(val)
+        AutoClickState.clickDelay = val
+        AutoClickState.lastValidDelay = val
+    end
+})
+
+UtilitiesTab:Button({
+    Title = "Boost FPS",
+    Icon = "lucide:zap",
+    Desc = "Optimasi performa game",
+    Callback = function()
+        BoostFPS()
+        WindUI:Notify({
+            Title = "FPS Boost",
+            Content = "Optimasi diterapkan!",
+            Duration = 3
+        })
+    end
+})
+
+UtilitiesTab:Button({
+    Title = "Auto Reconnect",
+    Icon = "lucide:wifi",
+    Desc = "Otomatis reconnect jika disconnect",
+    Callback = function()
+        task.spawn(AutoReconnect)
+        WindUI:Notify({
+            Title = "Auto Reconnect",
+            Content = "Sistem aktif!",
+            Duration = 3
+        })
+    end
+})
+
+-- ============================================================
+-- About Tab
+-- ============================================================
+AboutTab:Section({
+    Title = "Credits List",
+    TextSize = 16,
+})
+
+AboutTab:Paragraph({
+    Title = "UI Framework",
+    Desc = "WindUI Interface Suite",
+    Image = "layout",
+    ImageSize = 20,
+})
+
+AboutTab:Paragraph({
+    Title = "Developer", 
+    Desc = "Hirako",
+    Image = "user",
+    ImageSize = 20,
+})
+
+AboutTab:Button({
+    Title = "Copy Telegram",
+    Icon = "message-circle",
+    Desc = "Salin link Telegram ke clipboard",
+    Callback = function()
+        if setclipboard then
+            setclipboard("hirakoxs.t.me")
+            WindUI:Notify({
+                Title = "Telegram",
+                Content = "Link berhasil disalin!",
+                Duration = 3,
+                Icon = "check"
+            })
+        else
+            WindUI:Notify({
+                Title = "Error",
+                Content = "Clipboard tidak tersedia",
+                Duration = 3,
+                Icon = "x"
+            })
+        end
+    end
+})
+
+-- ============================================================
+-- Window Configuration
+-- ============================================================
+Window:EditOpenButton({
+    Title = "Hirako Fishing",
+    Icon = "lucide:fish",
+    CornerRadius = UDim.new(0,16),
+    StrokeThickness = 2,
+    Color = ColorSequence.new(
+        Color3.fromHex("FF0F7B"),
+        Color3.fromHex("F89B29")
+    ),
+    OnlyMobile = false,
+    Enabled = true,
+    Draggable = true,
+})
+
+-- Tambah tag
+Window:Tag({
+    Title = "V1.0.0",
+    Color = Color3.fromHex("#30ff6a"),
+    Radius = 10,
+})
+
+-- Tag Jam
+local TimeTag = Window:Tag({
+    Title = "--:--:--",
+    Icon = "lucide:timer", 
+    Radius = 10,
+    Color = WindUI:Gradient({
+        ["0"] = { Color = Color3.fromHex("#FF0F7B"), Transparency = 0 },
+        ["100"] = { Color = Color3.fromHex("#F89B29"), Transparency = 0 },
+    }, {
+        Rotation = 45,
+    }),
+})
+
+local hue = 0
+
+-- Rainbow + Jam Real-time
+task.spawn(function()
+    while true do
+        -- Ambil waktu sekarang
+        local now = os.date("*t")
+        local hours = string.format("%02d", now.hour)
+        local minutes = string.format("%02d", now.min) 
+        local seconds = string.format("%02d", now.sec)
+        
+        -- Update warna rainbow
+        hue = (hue + 0.01) % 1
+        local color = Color3.fromHSV(hue, 1, 1)
+        
+        -- Update judul tag jadi jam lengkap
+        TimeTag:SetTitle(hours .. ":" .. minutes .. ":" .. seconds)
+        
+        -- Kalau mau rainbow berjalan, aktifkan ini:
+        TimeTag:SetColor(color)
+        
+        task.wait(0.06) -- refresh cepat
+    end
+end)
+
+-- Setup rod watcher
+task.spawn(function()
+    task.wait(3)
+    setupRodWatcher()
+end)
+
+-- Final notif
+WindUI:Notify({
+    Title = "Hirako Fishing Hub",
+    Content = "Script berhasil di load!",
+    Duration = 5,
+    Icon = "fish"
+})
+
+pcall(function()
+    Window:Show()
+    MainTab:Show()
+end)
